@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE = 'ink-v1';
+const CACHE = 'ink-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -25,9 +25,19 @@ self.addEventListener('activate', (e) => {
   );
 });
 
+// Network-first: always serve fresh code when online (no cache-version bumps
+// needed after changes); fall back to the cached copy when offline.
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET' || !e.request.url.startsWith(self.location.origin)) return;
   e.respondWith(
-    caches.match(e.request, { ignoreSearch: true }).then((cached) => cached || fetch(e.request))
+    fetch(e.request)
+      .then((res) => {
+        if (res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put(e.request, copy));
+        }
+        return res;
+      })
+      .catch(() => caches.match(e.request, { ignoreSearch: true }))
   );
 });
