@@ -84,17 +84,6 @@ textarea:focus, input:focus { outline: none; }
   border-bottom-color: var(--accent);
 }
 
-.nav-pill {
-  cursor: pointer;
-  color: var(--bg);
-  background: var(--accent);
-  padding: 8px 18px;
-  border-radius: 999px;
-}
-
-@media (hover: hover) {
-  .nav-pill:hover { background: var(--accent-hover); }
-}
 
 /* ---------- Views ---------- */
 
@@ -212,19 +201,45 @@ textarea:focus, input:focus { outline: none; }
 /* ---------- All notes ---------- */
 
 .note-row {
+  position: relative;
+  overflow: hidden;
   cursor: pointer;
-  padding: 18px 12px;
   border-bottom: 1px solid var(--border-faint);
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
   border-left: 2px solid transparent;
+  touch-action: pan-y;
 }
 
 .note-row.open { border-left-color: var(--accent); }
 
+.note-inner {
+  position: relative;
+  padding: 18px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  background: var(--bg);
+  transition: transform .18s ease;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 @media (hover: hover) {
-  .note-row:hover { background: var(--bg-hover); }
+  .note-row:hover .note-inner { background: var(--bg-hover); }
+}
+
+.note-del {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 88px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--red-hover);
+  color: var(--red);
+  font: 500 12px var(--mono);
+  cursor: pointer;
 }
 
 .note-row-top {
@@ -335,7 +350,14 @@ textarea:focus, input:focus { outline: none; }
   background: transparent;
 }
 
-.task-row.dragging { background: var(--bg-drag); }
+.drag-active .task-row { transition: transform .15s ease; }
+
+.task-row.dragging {
+  background: var(--bg-drag);
+  position: relative;
+  z-index: 1;
+  transition: none;
+}
 
 .grip {
   color: var(--border-chip);

@@ -12,6 +12,10 @@ const state = {
 
 const $ = (id) => document.getElementById(id);
 
+// Date.now() alone collides when two items are created in the same millisecond
+let uidSeq = 0;
+const uid = () => Date.now() * 1000 + (uidSeq = (uidSeq + 1) % 1000);
+
 /* ---------- persistence ---------- */
 
 function load() {
@@ -23,7 +27,7 @@ function load() {
     state.tasks = s.tasks || [];
     state.sort = s.sort || 'added';
   } else {
-    const n = { id: Date.now(), text: '', createdAt: Date.now(), updatedAt: Date.now() };
+    const n = { id: uid(), text: '', createdAt: Date.now(), updatedAt: Date.now() };
     state.notes = [n];
     state.activeId = n.id;
   }
@@ -85,6 +89,7 @@ function render() {
   const { view } = state;
   $('nav-note').classList.toggle('active', view === 'note');
   $('nav-all').classList.toggle('active', view === 'all');
+  $('nav-tasks').classList.toggle('active', view === 'tasks');
   $('view-note').hidden = view !== 'note';
   $('view-all').hidden = view !== 'all';
   $('view-tasks').hidden = view !== 'tasks';
@@ -115,14 +120,21 @@ function renderAll() {
   const sorted = state.notes.slice().sort((a, b) => b.updatedAt - a.updatedAt);
   for (const n of sorted) {
     const row = el('div', 'note-row' + (n.id === state.activeId ? ' open' : ''));
+    const inner = el('div', 'note-inner');
     const top = el('div', 'note-row-top');
     top.append(
       el('span', 'note-title', (n.text.split('\n')[0] || '').trim() || 'Untitled note'),
       el('span', 'note-meta', fmtDate(n.updatedAt) + (n.id === state.activeId ? ' · open' : ''))
     );
     const snippet = n.text.split('\n').slice(1).join(' ').trim() || (n.text.trim() ? '' : 'Empty');
-    row.append(top, el('span', 'note-snippet', snippet));
-    row.addEventListener('click', () => set({ activeId: n.id, view: 'note' }));
+    inner.append(top, el('span', 'note-snippet', snippet));
+    const del = el('span', 'note-del', 'Delete');
+    del.addEventListener('click', (e) => {
+      e.stopPropagation();
+      deleteNote(n.id);
+    });
+    row.append(del, inner);
+    attachSwipe(row, inner, () => set({ activeId: n.id, view: 'note' }));
     list.append(row);
   }
   $('no-notes').hidden = !(state.notes.length <= 1 && (!active || !active.text.trim()));
@@ -187,34 +199,58 @@ function renderChips() {
   }
 }
 
-/* ---------- manual drag-reorder (pointer events: works for touch + mouse) ---------- */
+/* ---------- manual drag-reorder (pointer events: works for touch + mouse) ----------
+   The dragged row follows the pointer via CSS transforms and siblings shift out of
+   the way; nothing moves in the DOM until pointerup. Moving the row mid-drag would
+   detach it and silently release the pointer capture (the original one-slot bug). */
+
+function moveOpenTask(from, to) {
+  if (from === to) return;
+  const open = state.tasks.filter((t) => !t.done);
+  const done = state.tasks.filter((t) => t.done);
+  const [moved] = open.splice(from, 1);
+  open.splice(to, 0, moved);
+  set({ tasks: [...open, ...done] });
+}
 
 function attachDrag(grip, row) {
   grip.addEventListener('pointerdown', (e) => {
     e.preventDefault();
-    grip.setPointerCapture(e.pointerId);
-    row.classList.add('dragging');
+    try { grip.setPointerCapture(e.pointerId); } catch (err) {}
     const container = row.parentElement;
+    const rows = [...container.children];
+    const startIdx = rows.indexOf(row);
+    const rects = rows.map((r) => r.getBoundingClientRect());
+    const h = rects[startIdx].height;
+    let target = startIdx;
+    row.classList.add('dragging');
+    container.classList.add('drag-active');
 
     const move = (ev) => {
-      const rows = [...container.children];
-      const y = ev.clientY;
-      const rowIdx = rows.indexOf(row);
-      for (const other of rows) {
-        if (other === row) continue;
-        const r = other.getBoundingClientRect();
-        const mid = r.top + r.height / 2;
-        const otherIdx = rows.indexOf(other);
-        if (otherIdx < rowIdx && y < mid) { container.insertBefore(row, other); break; }
-        if (otherIdx > rowIdx && y > mid) { container.insertBefore(row, other.nextSibling); break; }
-      }
+      const dy = ev.clientY - e.clientY;
+      row.style.transform = `translateY(${dy}px)`;
+      const center = rects[startIdx].top + h / 2 + dy;
+      target = rows.reduce(
+        (t, _, i) => t + (i !== startIdx && rects[i].top + rects[i].height / 2 < center ? 1 : 0),
+        0
+      );
+      rows.forEach((r, i) => {
+        if (i === startIdx) return;
+        let shift = 0;
+        if (i > startIdx && i <= target) shift = -h;
+        else if (i < startIdx && i >= target) shift = h;
+        r.style.transform = shift ? `translateY(${shift}px)` : '';
+      });
     };
-    const up = () => {
+    const up = (ev) => {
       grip.removeEventListener('pointermove', move);
       grip.removeEventListener('pointerup', up);
       grip.removeEventListener('pointercancel', up);
       row.classList.remove('dragging');
-      commitOrder(container);
+      container.classList.remove('drag-active');
+      rows.forEach((r) => (r.style.transform = ''));
+      if (ev.type === 'pointercancel') render();
+      else moveOpenTask(startIdx, target);
     };
     grip.addEventListener('pointermove', move);
     grip.addEventListener('pointerup', up);
@@ -222,12 +258,73 @@ function attachDrag(grip, row) {
   });
 }
 
-function commitOrder(container) {
-  const order = [...container.children].map((r) => Number(r.dataset.id));
-  const byId = new Map(state.tasks.map((t) => [t.id, t]));
-  const reordered = order.map((id) => byId.get(id)).filter(Boolean);
-  const done = state.tasks.filter((t) => t.done);
-  set({ tasks: [...reordered, ...done] });
+/* ---------- swipe-to-delete notes (pointer events: touch swipe or mouse drag) ---------- */
+
+const SWIPE_W = 88;
+let openSwipe = null;
+
+function closeSwipe() {
+  if (openSwipe) {
+    openSwipe.style.transform = '';
+    openSwipe = null;
+  }
+}
+
+function attachSwipe(row, inner, onTap) {
+  row.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('.note-del')) return;
+    try { row.setPointerCapture(e.pointerId); } catch (err) {}
+    const startX = e.clientX, startY = e.clientY;
+    const base = openSwipe === inner ? -SWIPE_W : 0;
+    let swiping = false;
+
+    const move = (ev) => {
+      const dx = ev.clientX - startX, dy = ev.clientY - startY;
+      if (!swiping && Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy)) {
+        swiping = true;
+        inner.style.transition = 'none';
+      }
+      if (swiping) {
+        const x = Math.min(0, Math.max(-SWIPE_W, base + dx));
+        inner.style.transform = `translateX(${x}px)`;
+      }
+    };
+    const up = (ev) => {
+      row.removeEventListener('pointermove', move);
+      row.removeEventListener('pointerup', up);
+      row.removeEventListener('pointercancel', up);
+      inner.style.transition = '';
+      if (swiping) {
+        const x = base + (ev.clientX - startX);
+        closeSwipe();
+        if (ev.type !== 'pointercancel' && x < -SWIPE_W / 2) {
+          inner.style.transform = `translateX(${-SWIPE_W}px)`;
+          openSwipe = inner;
+        } else {
+          inner.style.transform = '';
+        }
+      } else if (ev.type !== 'pointercancel') {
+        if (openSwipe) closeSwipe();
+        else onTap();
+      }
+    };
+    row.addEventListener('pointermove', move);
+    row.addEventListener('pointerup', up);
+    row.addEventListener('pointercancel', up);
+  });
+}
+
+function deleteNote(id) {
+  let notes = state.notes.filter((n) => n.id !== id);
+  let activeId = state.activeId;
+  if (!notes.length) {
+    notes = [{ id: uid(), text: '', createdAt: Date.now(), updatedAt: Date.now() }];
+  }
+  if (!notes.some((n) => n.id === activeId)) {
+    activeId = notes.slice().sort((a, b) => b.updatedAt - a.updatedAt)[0].id;
+  }
+  openSwipe = null;
+  set({ notes, activeId });
 }
 
 /* ---------- events ---------- */
@@ -240,7 +337,7 @@ function addTask() {
   set({
     tasks: [
       ...state.tasks,
-      { id: Date.now(), title, due: dueInput.value || null, done: false, createdAt: Date.now() },
+      { id: uid(), title, due: dueInput.value || null, done: false, createdAt: Date.now() },
     ],
   });
   titleInput.value = '';
@@ -270,7 +367,7 @@ function init() {
   $('new-note').addEventListener('click', () => {
     const active = activeNote();
     if (active && !active.text.trim()) return;
-    const n = { id: Date.now(), text: '', createdAt: Date.now(), updatedAt: Date.now() };
+    const n = { id: uid(), text: '', createdAt: Date.now(), updatedAt: Date.now() };
     set({ notes: [...state.notes, n], activeId: n.id, view: 'note' });
     $('editor').focus();
   });
