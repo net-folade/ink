@@ -122,9 +122,17 @@ function renderAll() {
     const row = el('div', 'note-row' + (n.id === state.activeId ? ' open' : ''));
     const inner = el('div', 'note-inner');
     const top = el('div', 'note-row-top');
+    const x = el('span', 'note-x', '×');
+    x.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeSwipe();
+      inner.style.transform = `translateX(${-SWIPE_W}px)`;
+      openSwipe = inner;
+    });
     top.append(
       el('span', 'note-title', (n.text.split('\n')[0] || '').trim() || 'Untitled note'),
-      el('span', 'note-meta', fmtDate(n.updatedAt) + (n.id === state.activeId ? ' · open' : ''))
+      el('span', 'note-meta', fmtDate(n.updatedAt) + (n.id === state.activeId ? ' · open' : '')),
+      x
     );
     const snippet = n.text.split('\n').slice(1).join(' ').trim() || (n.text.trim() ? '' : 'Empty');
     inner.append(top, el('span', 'note-snippet', snippet));
@@ -272,7 +280,7 @@ function closeSwipe() {
 
 function attachSwipe(row, inner, onTap) {
   row.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('.note-del')) return;
+    if (e.target.closest('.note-del, .note-x')) return;
     try { row.setPointerCapture(e.pointerId); } catch (err) {}
     const startX = e.clientX, startY = e.clientY;
     const base = openSwipe === inner ? -SWIPE_W : 0;

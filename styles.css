@@ -263,6 +263,18 @@ textarea:focus, input:focus { outline: none; }
   flex-shrink: 0;
 }
 
+.note-x {
+  flex-shrink: 0;
+  color: var(--faint);
+  font: 400 17px/1 var(--sans);
+  padding: 0 2px 0 6px;
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .note-x:hover { color: var(--red); }
+}
+
 .note-snippet {
   font: 400 13.5px var(--sans);
   color: var(--secondary);
