@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ink.</title>
+<meta name="theme-color" content="#0e0e10">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ink.">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icons/icon-192.png">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="logo" id="logo">ink.</div>
+    <nav class="nav">
+      <span id="nav-note" class="nav-link">Note</span>
+      <span id="nav-all" class="nav-link">All notes</span>
+      <span id="nav-tasks" class="nav-pill">Tasks</span>
+    </nav>
+  </header>
+
+  <main id="view-note" class="view" hidden>
+    <div class="col col-note">
+      <textarea id="editor" placeholder="Start writing…" spellcheck="false"></textarea>
+      <div class="note-footer">
+        <div class="dl-group">
+          <span class="dl-label">Download:</span>
+          <span id="dl-txt" class="dl-btn">.txt</span>
+          <span id="dl-md" class="dl-btn">.md</span>
+          <span id="saved-meta" class="saved-meta"></span>
+        </div>
+        <span id="new-note" class="new-note-btn">+ New note</span>
+      </div>
+    </div>
+  </main>
+
+  <main id="view-all" class="view view-scroll" hidden>
+    <div class="col col-list">
+      <div class="page-title">All notes <span id="note-count" class="count"></span></div>
+      <div id="notes-list"></div>
+      <div id="no-notes" class="empty" hidden>Nothing saved yet — your current note appears here once you start a new one.</div>
+    </div>
+  </main>
+
+  <main id="view-tasks" class="view view-scroll" hidden>
+    <div class="col col-tasks">
+      <div class="tasks-head">
+        <div class="page-title">Tasks</div>
+        <div id="sort-chips" class="chips"></div>
+      </div>
+      <div class="add-row">
+        <input id="new-task" placeholder="Add a task…" autocomplete="off">
+        <input id="new-due" type="date">
+        <span id="add-task" class="add-btn">Add</span>
+      </div>
+      <div id="active-tasks"></div>
+      <div id="no-tasks" class="empty empty-tasks" hidden>No open tasks.</div>
+      <div id="done-section" hidden>
+        <div class="done-head">
+          <span class="done-label">COMPLETED · <span id="done-count"></span></span>
+          <span id="delete-done" class="delete-done">Delete completed</span>
+        </div>
+        <div id="done-tasks"></div>
+      </div>
+    </div>
+  </main>
+</div>
+<script src="./app.js"></script>
+</body>
+</html>
