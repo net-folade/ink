@@ -6,6 +6,9 @@ const ASSETS = [
   './index.html',
   './styles.css',
   './app.js',
+  './sync.js',
+  // config.js is not precached: it's gitignored, and a 404 would fail the whole
+  // addAll() install. The network-first fetch handler caches it at runtime.
   './manifest.webmanifest',
   './icons/icon-192.png',
   './icons/icon-512.png',

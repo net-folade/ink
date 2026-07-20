@@ -8,6 +8,7 @@ const state = {
   activeId: null,
   tasks: [],
   sort: 'added',
+  deleted: { notes: {}, tasks: {} }, // tombstones (id → deletedAt ms) so sync can propagate deletes
 };
 
 const $ = (id) => document.getElementById(id);
@@ -24,8 +25,10 @@ function load() {
   if (s && s.notes && s.notes.length) {
     state.notes = s.notes;
     state.activeId = s.activeId ?? s.notes[0].id;
-    state.tasks = s.tasks || [];
+    // v1 tasks had no updatedAt; sync needs it for last-write-wins
+    state.tasks = (s.tasks || []).map((t) => (t.updatedAt ? t : { ...t, updatedAt: t.createdAt }));
     state.sort = s.sort || 'added';
+    if (s.deleted && s.deleted.notes) state.deleted = s.deleted;
   } else {
     const n = { id: uid(), text: '', createdAt: Date.now(), updatedAt: Date.now() };
     state.notes = [n];
@@ -33,9 +36,12 @@ function load() {
   }
 }
 
+let applyingRemote = false;
+
 function save() {
-  const { notes, activeId, tasks, sort } = state;
-  try { localStorage.setItem(KEY, JSON.stringify({ notes, activeId, tasks, sort })); } catch (e) {}
+  const { notes, activeId, tasks, sort, deleted } = state;
+  try { localStorage.setItem(KEY, JSON.stringify({ notes, activeId, tasks, sort, deleted })); } catch (e) {}
+  if (!applyingRemote) document.dispatchEvent(new Event('ink:change'));
 }
 
 function set(patch) {
@@ -102,17 +108,17 @@ function renderNote() {
   const active = activeNote();
   const editor = $('editor');
   const text = active ? active.text : '';
-  if (editor.value !== text) editor.value = text;
-  updateSavedMeta();
-}
-
-function updateSavedMeta() {
-  const active = activeNote();
-  $('saved-meta').textContent =
-    active && active.text.trim() ? 'saved · persists until you start a new note' : '';
+  if (editor.value !== text) {
+    // a synced update can rewrite the textarea mid-edit; keep the caret in place
+    const focused = document.activeElement === editor;
+    const start = editor.selectionStart, end = editor.selectionEnd;
+    editor.value = text;
+    if (focused) editor.setSelectionRange(Math.min(start, text.length), Math.min(end, text.length));
+  }
 }
 
 function renderAll() {
+  openSwipe = null; // rows are rebuilt closed; drop any handle to a detached node
   const active = activeNote();
   $('note-count').textContent = '· ' + state.notes.length;
   const list = $('notes-list');
@@ -171,7 +177,7 @@ function renderTasks() {
     const grip = el('span', 'grip', '⠿');
     const check = el('span', 'task-check');
     check.addEventListener('click', () =>
-      set({ tasks: state.tasks.map((x) => (x.id === t.id ? { ...x, done: true } : x)) })
+      set({ tasks: state.tasks.map((x) => (x.id === t.id ? { ...x, done: true, updatedAt: Date.now() } : x)) })
     );
     const due = el('span', 'task-due' + (t.due && t.due <= todayStr ? ' soon' : ''), fmtDue(t.due));
     row.append(grip, check, el('span', 'task-title', t.title), due);
@@ -189,7 +195,7 @@ function renderTasks() {
     const row = el('div', 'done-row');
     const check = el('span', 'done-check', '✓');
     check.addEventListener('click', () =>
-      set({ tasks: state.tasks.map((x) => (x.id === t.id ? { ...x, done: false } : x)) })
+      set({ tasks: state.tasks.map((x) => (x.id === t.id ? { ...x, done: false, updatedAt: Date.now() } : x)) })
     );
     row.append(el('span', 'done-spacer'), check, el('span', 'done-title', t.title));
     doneList.append(row);
@@ -218,7 +224,11 @@ function moveOpenTask(from, to) {
   const done = state.tasks.filter((t) => t.done);
   const [moved] = open.splice(from, 1);
   open.splice(to, 0, moved);
-  set({ tasks: [...open, ...done] });
+  // write pos and stamp only rows whose slot changed, so the new order wins
+  // last-write-wins on other devices without clobbering unrelated edits
+  const now = Date.now();
+  const stamped = open.map((t, i) => (t.pos === i ? t : { ...t, pos: i, updatedAt: now }));
+  set({ tasks: [...stamped, ...done] });
 }
 
 function attachDrag(grip, row) {
@@ -231,6 +241,7 @@ function attachDrag(grip, row) {
     const rects = rows.map((r) => r.getBoundingClientRect());
     const h = rects[startIdx].height;
     let target = startIdx;
+    uiBusy = true;
     row.classList.add('dragging');
     container.classList.add('drag-active');
 
@@ -251,6 +262,7 @@ function attachDrag(grip, row) {
       });
     };
     const up = (ev) => {
+      uiBusy = false;
       grip.removeEventListener('pointermove', move);
       grip.removeEventListener('pointerup', up);
       grip.removeEventListener('pointercancel', up);
@@ -270,6 +282,7 @@ function attachDrag(grip, row) {
 
 const SWIPE_W = 88;
 let openSwipe = null;
+let uiBusy = false; // true during an active drag/swipe; sync defers applying remote data
 
 function closeSwipe() {
   if (openSwipe) {
@@ -285,6 +298,7 @@ function attachSwipe(row, inner, onTap) {
     const startX = e.clientX, startY = e.clientY;
     const base = openSwipe === inner ? -SWIPE_W : 0;
     let swiping = false;
+    uiBusy = true;
 
     const move = (ev) => {
       const dx = ev.clientX - startX, dy = ev.clientY - startY;
@@ -298,6 +312,7 @@ function attachSwipe(row, inner, onTap) {
       }
     };
     const up = (ev) => {
+      uiBusy = false;
       row.removeEventListener('pointermove', move);
       row.removeEventListener('pointerup', up);
       row.removeEventListener('pointercancel', up);
@@ -323,6 +338,7 @@ function attachSwipe(row, inner, onTap) {
 }
 
 function deleteNote(id) {
+  state.deleted.notes[id] = Date.now();
   let notes = state.notes.filter((n) => n.id !== id);
   let activeId = state.activeId;
   if (!notes.length) {
@@ -335,6 +351,25 @@ function deleteNote(id) {
   set({ notes, activeId });
 }
 
+/* ---------- v2 sync bridge (used by sync.js) ---------- */
+
+window.inkApp = {
+  get state() { return state; },
+  get busy() { return uiBusy; },
+  applyRemote({ notes, tasks, deleted }) {
+    if (!notes.length) {
+      notes = [{ id: uid(), text: '', createdAt: Date.now(), updatedAt: Date.now() }];
+    }
+    let activeId = state.activeId;
+    if (!notes.some((n) => n.id === activeId)) {
+      activeId = notes.slice().sort((a, b) => b.updatedAt - a.updatedAt)[0].id;
+    }
+    // suppress ink:change so applying pulled data doesn't re-trigger a sync
+    applyingRemote = true;
+    try { set({ notes, tasks, deleted, activeId }); } finally { applyingRemote = false; }
+  },
+};
+
 /* ---------- events ---------- */
 
 function addTask() {
@@ -345,7 +380,7 @@ function addTask() {
   set({
     tasks: [
       ...state.tasks,
-      { id: uid(), title, due: dueInput.value || null, done: false, createdAt: Date.now() },
+      { id: uid(), title, due: dueInput.value || null, done: false, createdAt: Date.now(), updatedAt: Date.now() },
     ],
   });
   titleInput.value = '';
@@ -366,7 +401,6 @@ function init() {
     n.text = e.target.value;
     n.updatedAt = Date.now();
     save();
-    updateSavedMeta();
   });
 
   $('dl-txt').addEventListener('click', () => download('txt'));
@@ -385,9 +419,11 @@ function init() {
     if (e.key === 'Enter') addTask();
   });
 
-  $('delete-done').addEventListener('click', () =>
-    set({ tasks: state.tasks.filter((t) => !t.done) })
-  );
+  $('delete-done').addEventListener('click', () => {
+    const now = Date.now();
+    for (const t of state.tasks) if (t.done) state.deleted.tasks[t.id] = now;
+    set({ tasks: state.tasks.filter((t) => !t.done) });
+  });
 
   render();
 
