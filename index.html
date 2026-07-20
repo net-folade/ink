@@ -21,6 +21,7 @@
       <span id="nav-note" class="nav-link">Note</span>
       <span id="nav-all" class="nav-link">All notes</span>
       <span id="nav-tasks" class="nav-link">Tasks</span>
+      <span id="sync-status" class="sync-status" hidden></span>
     </nav>
   </header>
 
@@ -32,7 +33,6 @@
           <span class="dl-label">Download:</span>
           <span id="dl-txt" class="dl-btn">.txt</span>
           <span id="dl-md" class="dl-btn">.md</span>
-          <span id="saved-meta" class="saved-meta"></span>
         </div>
         <span id="new-note" class="new-note-btn">+ New note</span>
       </div>
@@ -70,6 +70,23 @@
     </div>
   </main>
 </div>
+
+<div id="login-modal" class="login-modal" hidden>
+  <div class="login-card">
+    <div class="login-title">sync.</div>
+    <input id="login-email" type="email" placeholder="Email" autocomplete="username">
+    <input id="login-password" type="password" placeholder="Password" autocomplete="current-password">
+    <div id="login-error" class="login-error"></div>
+    <div class="login-actions">
+      <span id="login-cancel" class="login-cancel">Cancel</span>
+      <span id="login-submit" class="login-btn">Log in</span>
+    </div>
+  </div>
+</div>
+
 <script src="./app.js"></script>
+<script src="./config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
+<script src="./sync.js" defer></script>
 </body>
 </html>
