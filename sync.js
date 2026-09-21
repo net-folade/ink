@@ -1,8 +1,8 @@
 'use strict';
 
 /* v2 cross-device sync (Supabase). Local-first: localStorage stays the source
-   of truth. Each cycle pulls all rows, merges into local state (last-write-wins
-   per item on updated_at; deletes are soft via deleted_at + local tombstones so
+   of truth. Each cycle pulls all notes, merges into local state (last-write-wins
+   per note on updated_at; deletes are soft via deleted_at + local tombstones so
    an offline device can't resurrect them), applies the result, then pushes the
    merged state back. Dormant when config.js or the supabase-js CDN script is
    unavailable — the app then runs exactly as v1. */
@@ -80,20 +80,8 @@
   function rowToNote(r) {
     return { id: Number(r.id), text: r.text, createdAt: Number(r.created_at), updatedAt: Number(r.updated_at) };
   }
-  function rowToTask(r) {
-    return {
-      id: Number(r.id), title: r.title, due: r.due, done: r.done, pos: r.pos,
-      createdAt: Number(r.created_at), updatedAt: Number(r.updated_at),
-    };
-  }
   function noteToRow(n) {
     return { id: n.id, text: n.text, created_at: n.createdAt, updated_at: n.updatedAt ?? n.createdAt, deleted_at: null };
-  }
-  function taskToRow(t, i) {
-    return {
-      id: t.id, title: t.title, due: t.due || null, done: !!t.done, pos: t.pos ?? i,
-      created_at: t.createdAt, updated_at: t.updatedAt ?? t.createdAt, deleted_at: null,
-    };
   }
   function tombRow(id, ts, extra) {
     return Object.assign({ id: Number(id), created_at: ts, updated_at: ts, deleted_at: ts }, extra);
@@ -156,44 +144,31 @@
 
   async function fullSync() {
     if (!session) return;
-    // applying remote data re-renders the lists, which would detach a row the
-    // user is mid-drag/swipe on — defer the whole cycle until the gesture ends
+    // applying remote data re-renders the list, which would detach a row the
+    // user is mid-swipe on — defer the whole cycle until the gesture ends
     if (window.inkApp.busy) { retryWhileBusy(); return; }
     if (syncing) { queued = true; return; }
     syncing = true;
     setStatus('syncing…');
     try {
-      const [notesRows, tasksRows] = await Promise.all([fetchAll('notes'), fetchAll('tasks')]);
+      const notesRows = await fetchAll('notes');
       if (window.inkApp.busy) { retryWhileBusy(); return; }
 
       const s = window.inkApp.state;
-      const del = s.deleted || { notes: {}, tasks: {} };
+      const del = s.deleted || { notes: {} };
       const n = merge(s.notes, del.notes, notesRows, rowToNote);
-      const t = merge(s.tasks, del.tasks, tasksRows, rowToTask);
-      if (t.changed) {
-        t.items.sort((a, b) => (a.pos ?? Infinity) - (b.pos ?? Infinity) || a.createdAt - b.createdAt);
-      }
-      if (n.changed || t.changed) {
-        window.inkApp.applyRemote({
-          notes: n.items,
-          tasks: t.items,
-          deleted: { notes: n.tombs, tasks: t.tombs },
-        });
+      if (n.changed) {
+        window.inkApp.applyRemote({ notes: n.items, deleted: { notes: n.tombs } });
       }
 
       const cur = window.inkApp.state;
+      // tombstone keys must exactly match noteToRow's — PostgREST rejects bulk
+      // upserts whose objects have different key sets
       const noteRows = cur.notes.map(noteToRow)
         .concat(Object.entries(n.tombs).map(([id, ts]) => tombRow(id, ts, { text: '' })));
-      const taskRows = cur.tasks.map(taskToRow)
-        // tombstone keys must exactly match taskToRow's — PostgREST rejects bulk
-        // upserts whose objects have different key sets
-        .concat(Object.entries(t.tombs).map(([id, ts]) =>
-          tombRow(id, ts, { title: '', due: null, done: true, pos: null })));
-      const ups = [];
-      if (noteRows.length) ups.push(db.from('notes').upsert(noteRows));
-      if (taskRows.length) ups.push(db.from('tasks').upsert(taskRows));
-      for (const res of await Promise.all(ups)) {
-        if (res.error) throw res.error;
+      if (noteRows.length) {
+        const { error } = await db.from('notes').upsert(noteRows);
+        if (error) throw error;
       }
       setStatus('synced', 'ok');
     } catch (e) {

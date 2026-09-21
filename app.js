@@ -6,9 +6,7 @@ const state = {
   view: 'note',
   notes: [],
   activeId: null,
-  tasks: [],
-  sort: 'added',
-  deleted: { notes: {}, tasks: {} }, // tombstones (id → deletedAt ms) so sync can propagate deletes
+  deleted: { notes: {} }, // tombstones (id → deletedAt ms) so sync can propagate deletes
 };
 
 const $ = (id) => document.getElementById(id);
@@ -25,10 +23,7 @@ function load() {
   if (s && s.notes && s.notes.length) {
     state.notes = s.notes;
     state.activeId = s.activeId ?? s.notes[0].id;
-    // v1 tasks had no updatedAt; sync needs it for last-write-wins
-    state.tasks = (s.tasks || []).map((t) => (t.updatedAt ? t : { ...t, updatedAt: t.createdAt }));
-    state.sort = s.sort || 'added';
-    if (s.deleted && s.deleted.notes) state.deleted = s.deleted;
+    if (s.deleted && s.deleted.notes) state.deleted = { notes: s.deleted.notes };
   } else {
     const n = { id: uid(), text: '', createdAt: Date.now(), updatedAt: Date.now() };
     state.notes = [n];
@@ -39,8 +34,8 @@ function load() {
 let applyingRemote = false;
 
 function save() {
-  const { notes, activeId, tasks, sort, deleted } = state;
-  try { localStorage.setItem(KEY, JSON.stringify({ notes, activeId, tasks, sort, deleted })); } catch (e) {}
+  const { notes, activeId, deleted } = state;
+  try { localStorage.setItem(KEY, JSON.stringify({ notes, activeId, deleted })); } catch (e) {}
   if (!applyingRemote) document.dispatchEvent(new Event('ink:change'));
 }
 
@@ -60,14 +55,6 @@ function fmtDate(ts) {
   const d = new Date(ts), today = new Date();
   if (d.toDateString() === today.toDateString()) return 'Today';
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
-
-function fmtDue(due) {
-  if (!due) return 'no due date';
-  const d = new Date(due + 'T00:00'), today = new Date();
-  today.setHours(0, 0, 0, 0);
-  if (d.getTime() === today.getTime()) return 'due today';
-  return 'due ' + d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 function download(ext) {
@@ -95,13 +82,10 @@ function render() {
   const { view } = state;
   $('nav-note').classList.toggle('active', view === 'note');
   $('nav-all').classList.toggle('active', view === 'all');
-  $('nav-tasks').classList.toggle('active', view === 'tasks');
   $('view-note').hidden = view !== 'note';
   $('view-all').hidden = view !== 'all';
-  $('view-tasks').hidden = view !== 'tasks';
   if (view === 'note') renderNote();
-  else if (view === 'all') renderAll();
-  else renderTasks();
+  else renderAll();
 }
 
 function renderNote() {
@@ -152,130 +136,6 @@ function renderAll() {
     list.append(row);
   }
   $('no-notes').hidden = !(state.notes.length <= 1 && (!active || !active.text.trim()));
-}
-
-function renderTasks() {
-  renderChips();
-
-  let open = state.tasks.filter((t) => !t.done);
-  if (state.sort === 'added') open = open.slice().sort((a, b) => a.createdAt - b.createdAt);
-  else if (state.sort === 'due') {
-    open = open.slice().sort(
-      (a, b) =>
-        (a.due ? new Date(a.due).getTime() : Infinity) -
-        (b.due ? new Date(b.due).getTime() : Infinity)
-    );
-  }
-  const manual = state.sort === 'manual';
-  const todayStr = new Date().toISOString().slice(0, 10);
-
-  const list = $('active-tasks');
-  list.textContent = '';
-  for (const t of open) {
-    const row = el('div', 'task-row' + (manual ? ' draggable' : ''));
-    row.dataset.id = t.id;
-    const grip = el('span', 'grip', '⠿');
-    const check = el('span', 'task-check');
-    check.addEventListener('click', () =>
-      set({ tasks: state.tasks.map((x) => (x.id === t.id ? { ...x, done: true, updatedAt: Date.now() } : x)) })
-    );
-    const due = el('span', 'task-due' + (t.due && t.due <= todayStr ? ' soon' : ''), fmtDue(t.due));
-    row.append(grip, check, el('span', 'task-title', t.title), due);
-    if (manual) attachDrag(grip, row);
-    list.append(row);
-  }
-  $('no-tasks').hidden = open.length !== 0;
-
-  const done = state.tasks.filter((t) => t.done);
-  $('done-section').hidden = done.length === 0;
-  $('done-count').textContent = done.length;
-  const doneList = $('done-tasks');
-  doneList.textContent = '';
-  for (const t of done) {
-    const row = el('div', 'done-row');
-    const check = el('span', 'done-check', '✓');
-    check.addEventListener('click', () =>
-      set({ tasks: state.tasks.map((x) => (x.id === t.id ? { ...x, done: false, updatedAt: Date.now() } : x)) })
-    );
-    row.append(el('span', 'done-spacer'), check, el('span', 'done-title', t.title));
-    doneList.append(row);
-  }
-}
-
-function renderChips() {
-  const chips = [['added', 'Date added'], ['due', 'Due date'], ['manual', 'Manual ⠿']];
-  const box = $('sort-chips');
-  box.textContent = '';
-  for (const [k, label] of chips) {
-    const chip = el('span', 'chip' + (state.sort === k ? ' active' : ''), label);
-    chip.addEventListener('click', () => set({ sort: k }));
-    box.append(chip);
-  }
-}
-
-/* ---------- manual drag-reorder (pointer events: works for touch + mouse) ----------
-   The dragged row follows the pointer via CSS transforms and siblings shift out of
-   the way; nothing moves in the DOM until pointerup. Moving the row mid-drag would
-   detach it and silently release the pointer capture (the original one-slot bug). */
-
-function moveOpenTask(from, to) {
-  if (from === to) return;
-  const open = state.tasks.filter((t) => !t.done);
-  const done = state.tasks.filter((t) => t.done);
-  const [moved] = open.splice(from, 1);
-  open.splice(to, 0, moved);
-  // write pos and stamp only rows whose slot changed, so the new order wins
-  // last-write-wins on other devices without clobbering unrelated edits
-  const now = Date.now();
-  const stamped = open.map((t, i) => (t.pos === i ? t : { ...t, pos: i, updatedAt: now }));
-  set({ tasks: [...stamped, ...done] });
-}
-
-function attachDrag(grip, row) {
-  grip.addEventListener('pointerdown', (e) => {
-    e.preventDefault();
-    try { grip.setPointerCapture(e.pointerId); } catch (err) {}
-    const container = row.parentElement;
-    const rows = [...container.children];
-    const startIdx = rows.indexOf(row);
-    const rects = rows.map((r) => r.getBoundingClientRect());
-    const h = rects[startIdx].height;
-    let target = startIdx;
-    uiBusy = true;
-    row.classList.add('dragging');
-    container.classList.add('drag-active');
-
-    const move = (ev) => {
-      const dy = ev.clientY - e.clientY;
-      row.style.transform = `translateY(${dy}px)`;
-      const center = rects[startIdx].top + h / 2 + dy;
-      target = rows.reduce(
-        (t, _, i) => t + (i !== startIdx && rects[i].top + rects[i].height / 2 < center ? 1 : 0),
-        0
-      );
-      rows.forEach((r, i) => {
-        if (i === startIdx) return;
-        let shift = 0;
-        if (i > startIdx && i <= target) shift = -h;
-        else if (i < startIdx && i >= target) shift = h;
-        r.style.transform = shift ? `translateY(${shift}px)` : '';
-      });
-    };
-    const up = (ev) => {
-      uiBusy = false;
-      grip.removeEventListener('pointermove', move);
-      grip.removeEventListener('pointerup', up);
-      grip.removeEventListener('pointercancel', up);
-      row.classList.remove('dragging');
-      container.classList.remove('drag-active');
-      rows.forEach((r) => (r.style.transform = ''));
-      if (ev.type === 'pointercancel') render();
-      else moveOpenTask(startIdx, target);
-    };
-    grip.addEventListener('pointermove', move);
-    grip.addEventListener('pointerup', up);
-    grip.addEventListener('pointercancel', up);
-  });
 }
 
 /* ---------- swipe-to-delete notes (pointer events: touch swipe or mouse drag) ---------- */
@@ -356,7 +216,7 @@ function deleteNote(id) {
 window.inkApp = {
   get state() { return state; },
   get busy() { return uiBusy; },
-  applyRemote({ notes, tasks, deleted }) {
+  applyRemote({ notes, deleted }) {
     if (!notes.length) {
       notes = [{ id: uid(), text: '', createdAt: Date.now(), updatedAt: Date.now() }];
     }
@@ -366,26 +226,11 @@ window.inkApp = {
     }
     // suppress ink:change so applying pulled data doesn't re-trigger a sync
     applyingRemote = true;
-    try { set({ notes, tasks, deleted, activeId }); } finally { applyingRemote = false; }
+    try { set({ notes, deleted, activeId }); } finally { applyingRemote = false; }
   },
 };
 
 /* ---------- events ---------- */
-
-function addTask() {
-  const titleInput = $('new-task');
-  const dueInput = $('new-due');
-  const title = titleInput.value.trim();
-  if (!title) return;
-  set({
-    tasks: [
-      ...state.tasks,
-      { id: uid(), title, due: dueInput.value || null, done: false, createdAt: Date.now(), updatedAt: Date.now() },
-    ],
-  });
-  titleInput.value = '';
-  dueInput.value = '';
-}
 
 function init() {
   load();
@@ -393,7 +238,6 @@ function init() {
   $('logo').addEventListener('click', () => set({ view: 'note' }));
   $('nav-note').addEventListener('click', () => set({ view: 'note' }));
   $('nav-all').addEventListener('click', () => set({ view: 'all' }));
-  $('nav-tasks').addEventListener('click', () => set({ view: 'tasks' }));
 
   $('editor').addEventListener('input', (e) => {
     const n = activeNote();
@@ -412,17 +256,6 @@ function init() {
     const n = { id: uid(), text: '', createdAt: Date.now(), updatedAt: Date.now() };
     set({ notes: [...state.notes, n], activeId: n.id, view: 'note' });
     $('editor').focus();
-  });
-
-  $('add-task').addEventListener('click', addTask);
-  $('new-task').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') addTask();
-  });
-
-  $('delete-done').addEventListener('click', () => {
-    const now = Date.now();
-    for (const t of state.tasks) if (t.done) state.deleted.tasks[t.id] = now;
-    set({ tasks: state.tasks.filter((t) => !t.done) });
   });
 
   render();
