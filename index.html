@@ -20,7 +20,6 @@
     <nav class="nav">
       <span id="nav-note" class="nav-link">Note</span>
       <span id="nav-all" class="nav-link">All notes</span>
-      <span id="nav-tasks" class="nav-link">Tasks</span>
       <span id="sync-status" class="sync-status" hidden></span>
     </nav>
   </header>
@@ -44,29 +43,6 @@
       <div class="page-title">All notes <span id="note-count" class="count"></span></div>
       <div id="notes-list"></div>
       <div id="no-notes" class="empty" hidden>Nothing saved yet — your current note appears here once you start a new one.</div>
-    </div>
-  </main>
-
-  <main id="view-tasks" class="view view-scroll" hidden>
-    <div class="col col-tasks">
-      <div class="tasks-head">
-        <div class="page-title">Tasks</div>
-        <div id="sort-chips" class="chips"></div>
-      </div>
-      <div class="add-row">
-        <input id="new-task" placeholder="Add a task…" autocomplete="off">
-        <input id="new-due" type="date">
-        <span id="add-task" class="add-btn">Add</span>
-      </div>
-      <div id="active-tasks"></div>
-      <div id="no-tasks" class="empty empty-tasks" hidden>No open tasks.</div>
-      <div id="done-section" hidden>
-        <div class="done-head">
-          <span class="done-label">COMPLETED · <span id="done-count"></span></span>
-          <span id="delete-done" class="delete-done">Delete completed</span>
-        </div>
-        <div id="done-tasks"></div>
-      </div>
     </div>
   </main>
 </div>
