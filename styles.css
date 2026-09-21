@@ -105,7 +105,9 @@ textarea:focus, input:focus { outline: none; }
 }
 
 .col-note {
-  width: min(680px, 100% - 48px);
+  width: 100%;
+  padding-left: max(36px, env(safe-area-inset-left));
+  padding-right: max(36px, env(safe-area-inset-right));
   flex: 1;
   min-height: 0;
   padding-bottom: 0;
@@ -547,6 +549,7 @@ textarea:focus, input:focus { outline: none; }
   .nav { gap: 18px; }
   .sync-status { padding: 4px 8px; }
   .view { padding-top: 28px; }
-  .col-note, .col-list, .col-tasks { width: calc(100% - 40px); }
+  .col-note { padding-left: max(20px, env(safe-area-inset-left)); padding-right: max(20px, env(safe-area-inset-right)); }
+  .col-list, .col-tasks { width: calc(100% - 40px); }
   .page-title { font-size: 28px; }
 }
