@@ -304,12 +304,16 @@ textarea:focus, input:focus { outline: none; }
   overflow-y: auto;
   z-index: 10;
   display: flex;
-  align-items: center;
+  /* not align-items: center -- a card taller than the modal would overflow past
+     the top edge, and start-edge overflow can never be scrolled back to. auto
+     margins centre it while it fits and let it scroll once it doesn't. */
+  align-items: flex-start;
   justify-content: center;
   background: rgba(0, 0, 0, .55);
 }
 
 .login-card {
+  margin: auto;
   width: min(340px, calc(100% - 48px));
   background: var(--bg-hover);
   border: 1px solid var(--border);
@@ -369,4 +373,23 @@ textarea:focus, input:focus { outline: none; }
   .col-note { padding-left: max(20px, env(safe-area-inset-left)); padding-right: max(20px, env(safe-area-inset-right)); }
   .col-list { width: calc(100% - 40px); }
   .page-title { font-size: 28px; }
+}
+
+/* ---------- Short screens ---------- */
+
+/* .compact is set by app.js whenever the visible viewport is under 450px tall --
+   a landscape phone, or portrait with the keyboard up. At full size the topbar,
+   view padding and footer come to ~190px of chrome that never shrinks, which
+   leaves the editor no height at all and pushes the footer outside .app, where
+   html { overflow: hidden } puts it permanently out of reach. */
+
+body.compact .topbar { height: calc(44px + env(safe-area-inset-top)); }
+
+body.compact .view { padding-top: 12px; }
+
+body.compact .page-title { font-size: 24px; }
+
+body.compact .note-footer {
+  padding-top: 10px;
+  padding-bottom: calc(10px + var(--safe-bottom, env(safe-area-inset-bottom)));
 }
