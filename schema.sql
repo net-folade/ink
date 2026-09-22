@@ -5,8 +5,7 @@
 -- bare id could collide across users and break their upserts under RLS.
 -- If you already ran an earlier version of this file, drop the table first:
 --   drop table if exists notes;
--- The tasks feature is gone; drop its leftover table when you're ready:
---   drop table if exists tasks;
+
 
 create table if not exists notes (
   id bigint not null,

@@ -230,6 +230,26 @@ window.inkApp = {
   },
 };
 
+/* ---------- viewport ---------- */
+
+// 100dvh ignores the on-screen keyboard, which pushes the note footer out of
+// sight while typing. Track the actually-visible viewport instead.
+function fitToViewport() {
+  const vv = window.visualViewport;
+  if (!vv) return;
+  const fit = () => {
+    if (vv.scale !== 1) return; // while pinch-zoomed vv.height is the zoomed box, not the app
+    const style = document.documentElement.style;
+    style.setProperty('--app-h', vv.height + 'px');
+    // keyboard up: the app already ends above it, so drop the home-bar inset
+    style.setProperty('--safe-bottom', window.innerHeight - vv.height > 80 ? '0px' : '');
+    window.scrollTo(0, 0); // ios still scrolls the layout viewport when an input is focused
+  };
+  vv.addEventListener('resize', fit);
+  window.addEventListener('pageshow', fit); // bfcache restore can skip the resize event
+  fit();
+}
+
 /* ---------- events ---------- */
 
 function init() {
@@ -258,6 +278,7 @@ function init() {
     $('editor').focus();
   });
 
+  fitToViewport();
   render();
 
   if ('serviceWorker' in navigator) {

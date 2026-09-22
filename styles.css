@@ -27,6 +27,7 @@
 html, body {
   margin: 0;
   height: 100%;
+  overflow: hidden;
   background: var(--bg);
   -webkit-text-size-adjust: 100%;
 }
@@ -37,7 +38,10 @@ a:hover { color: #b3baa4; }
 textarea:focus, input:focus { outline: none; }
 
 .app {
-  height: 100dvh;
+  /* --app-h tracks the visible viewport (set in app.js) so the footer stays put
+     when the keyboard or the url bar changes how much of the page is showing */
+  height: 100%;
+  height: var(--app-h, 100svh);
   display: flex;
   flex-direction: column;
   background: var(--bg);
@@ -135,6 +139,7 @@ textarea:focus, input:focus { outline: none; }
 
 #editor {
   flex: 1;
+  min-height: 0;
   background: transparent;
   border: none;
   resize: none;
@@ -153,7 +158,7 @@ textarea:focus, input:focus { outline: none; }
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
-  padding: 20px 0 calc(28px + env(safe-area-inset-bottom));
+  padding: 20px 0 calc(28px + var(--safe-bottom, env(safe-area-inset-bottom)));
   border-top: 1px solid var(--border);
   font: 500 13px var(--mono);
   flex-shrink: 0;
@@ -291,7 +296,12 @@ textarea:focus, input:focus { outline: none; }
 
 .login-modal {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 100%;
+  height: var(--app-h, 100svh);
+  overflow-y: auto;
   z-index: 10;
   display: flex;
   align-items: center;
