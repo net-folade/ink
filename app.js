@@ -237,15 +237,34 @@ window.inkApp = {
 function fitToViewport() {
   const vv = window.visualViewport;
   if (!vv) return;
+  const style = document.documentElement.style;
+  let width = 0;
+  let tallest = 0; // tallest height seen at this width, i.e. the keyboard-down height
+
   const fit = () => {
-    if (vv.scale !== 1) return; // while pinch-zoomed vv.height is the zoomed box, not the app
-    const style = document.documentElement.style;
+    if (vv.scale !== 1) {
+      // while pinch-zoomed vv.height is the zoomed box, not the app. clear the
+      // override instead of leaving a stale one: the page no longer scrolls, so
+      // a height from the old orientation would strand the footer out of reach.
+      style.removeProperty('--app-h');
+      return;
+    }
+    if (vv.width !== width) { width = vv.width; tallest = 0; } // rotated
+    tallest = Math.max(tallest, vv.height);
+
     style.setProperty('--app-h', vv.height + 'px');
-    // keyboard up: the app already ends above it, so drop the home-bar inset
-    style.setProperty('--safe-bottom', window.innerHeight - vv.height > 80 ? '0px' : '');
+    // keyboard up: the app already ends above it, so drop the home-bar inset.
+    // measured against the tallest height seen rather than innerHeight, because
+    // interactive-widget=resizes-content shrinks the layout viewport too.
+    style.setProperty('--safe-bottom', tallest - vv.height > 80 ? '0px' : '');
+    // too short for the full-size chrome (landscape, or landscape + keyboard):
+    // without this the editor gets no height and the footer overflows the app
+    document.body.classList.toggle('compact', vv.height < 450);
     window.scrollTo(0, 0); // ios still scrolls the layout viewport when an input is focused
   };
+
   vv.addEventListener('resize', fit);
+  window.addEventListener('resize', fit); // ios rotation can skip the vv event
   window.addEventListener('pageshow', fit); // bfcache restore can skip the resize event
   fit();
 }
