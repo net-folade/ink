@@ -158,7 +158,8 @@ textarea:focus, input:focus { outline: none; }
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
-  padding: 20px 0 calc(28px + var(--safe-bottom, env(safe-area-inset-bottom)));
+  /* flush to the bottom edge: only the home-bar inset sits under the buttons */
+  padding: 12px 0 var(--safe-bottom, env(safe-area-inset-bottom));
   border-top: 1px solid var(--border);
   font: 500 13px var(--mono);
   flex-shrink: 0;
@@ -390,6 +391,6 @@ body.compact .view { padding-top: 12px; }
 body.compact .page-title { font-size: 24px; }
 
 body.compact .note-footer {
-  padding-top: 10px;
-  padding-bottom: calc(10px + var(--safe-bottom, env(safe-area-inset-bottom)));
+  padding-top: 8px;
+  padding-bottom: var(--safe-bottom, env(safe-area-inset-bottom));
 }
