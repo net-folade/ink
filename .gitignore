@@ -2,3 +2,5 @@
 
 plan.md
 .env
+.vercel
+.env*
