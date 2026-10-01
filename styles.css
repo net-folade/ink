@@ -28,6 +28,7 @@ html, body {
   margin: 0;
   height: 100%;
   overflow: hidden;
+  overscroll-behavior: none; /* stop ios from dragging/rubber-banding the page */
   background: var(--bg);
   -webkit-text-size-adjust: 100%;
 }
@@ -39,7 +40,13 @@ textarea:focus, input:focus { outline: none; }
 
 .app {
   /* --app-h tracks the visible viewport (set in app.js) so the footer stays put
-     when the keyboard or the url bar changes how much of the page is showing */
+     when the keyboard or the url bar changes how much of the page is showing.
+     fixed so the page itself has no content to scroll: ipad safari ignored
+     overflow: hidden and let the whole app be dragged up and down */
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
   height: 100%;
   height: var(--app-h, 100svh);
   display: flex;
@@ -158,8 +165,9 @@ textarea:focus, input:focus { outline: none; }
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
-  /* flush to the bottom edge: only the home-bar inset sits under the buttons */
-  padding: 12px 0 var(--safe-bottom, env(safe-area-inset-bottom));
+  /* same gap on every device: the home-bar inset (0 on laptops, ~20-34px on
+     iphones and ipads) made it flush on laptops and loose on touch screens */
+  padding: 12px 0 16px;
   border-top: 1px solid var(--border);
   font: 500 13px var(--mono);
   flex-shrink: 0;
@@ -390,7 +398,4 @@ body.compact .view { padding-top: 12px; }
 
 body.compact .page-title { font-size: 24px; }
 
-body.compact .note-footer {
-  padding-top: 8px;
-  padding-bottom: var(--safe-bottom, env(safe-area-inset-bottom));
-}
+body.compact .note-footer { padding-top: 8px; }

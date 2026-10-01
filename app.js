@@ -252,20 +252,29 @@ function fitToViewport() {
     if (vv.width !== width) { width = vv.width; tallest = 0; } // rotated
     tallest = Math.max(tallest, vv.height);
 
-    style.setProperty('--app-h', vv.height + 'px');
+    // only follow the visible viewport while a text field is focused, i.e. while
+    // the keyboard can be up. ipad safari keeps reporting a short vv.height after
+    // the keyboard closes, which left a band of empty space under the footer.
+    const typing = ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName);
+    const height = typing ? vv.height : window.innerHeight;
+    style.setProperty('--app-h', height + 'px');
     // keyboard up: the app already ends above it, so drop the home-bar inset.
     // measured against the tallest height seen rather than innerHeight, because
     // interactive-widget=resizes-content shrinks the layout viewport too.
     style.setProperty('--safe-bottom', tallest - vv.height > 80 ? '0px' : '');
     // too short for the full-size chrome (landscape, or landscape + keyboard):
     // without this the editor gets no height and the footer overflows the app
-    document.body.classList.toggle('compact', vv.height < 450);
+    document.body.classList.toggle('compact', height < 450);
     window.scrollTo(0, 0); // ios still scrolls the layout viewport when an input is focused
   };
 
   vv.addEventListener('resize', fit);
   window.addEventListener('resize', fit); // ios rotation can skip the vv event
   window.addEventListener('pageshow', fit); // bfcache restore can skip the resize event
+  // ios doesn't always fire a resize when the keyboard closes. wait a tick so
+  // activeElement reflects where focus actually went.
+  document.addEventListener('focusin', fit);
+  document.addEventListener('focusout', () => setTimeout(fit));
   fit();
 }
 
