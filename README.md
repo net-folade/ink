@@ -3,7 +3,7 @@
 A minimal notes app that installs to your home screen and works offline.
 I built this cause i wanted a downloadable '.txt notes app i could access from all my devices. 
 
-Live: https://net-folade.github.io/ink/
+Live: https://ink-lake-eta.vercel.app
 
 ## What it does
 
@@ -20,7 +20,7 @@ last write wins.
 ## Stack
 
 Vanilla HTML, CSS, and JavaScript — no build step, no framework. Supabase
-(Postgres + auth) for sync. Hosted on GitHub Pages.
+(Postgres + auth) for sync. Hosted on Vercel.
 
 ## Run it locally
 
