@@ -3,7 +3,7 @@
 A minimal notes app that installs to your home screen and works offline.
 I built this cause i wanted a downloadable '.txt notes app i could access from all my devices. 
 
-Live: https://ink-lake-eta.vercel.app
+Live: https://env-ink.vercel.app
 
 ## What it does
 
